@@ -1,0 +1,37 @@
+# Binaries
+code-rag-mcp
+terraform-rag-mcp
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Vector Database
+qdrant_data/
+
+# System files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Generated/temporary files
+.indexing_state.json
+.code-rag-pending-reindex
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Config with local paths
+config.local.yaml
+
+# Go specific
+*.out
+vendor/
