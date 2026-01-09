@@ -1,0 +1,44 @@
+#!/bin/bash
+# code-rag-mcp git hook - post-merge
+# Auto-generated - do not edit manually
+
+echo "🔍 code-rag: Detecting merged files..."
+
+# Get files changed between ORIG_HEAD and HEAD (the merge)
+CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r ORIG_HEAD HEAD)
+
+# Filter by extensions we care about
+EXTENSIONS="\.js$|\.jsx$|\.ts$|\.tsx$|\.go$|\.py$|\.md$|\.tf$|\.yaml$|\.yml$|\.json$"
+FILES_TO_REINDEX=$(echo "$CHANGED_FILES" | grep -E "$EXTENSIONS")
+
+if [ -z "$FILES_TO_REINDEX" ]; then
+  echo "✅ No code files changed in merge, skipping re-indexing"
+  exit 0
+fi
+
+# Count files
+FILE_COUNT=$(echo "$FILES_TO_REINDEX" | wc -l | tr -d ' ')
+echo "📝 Re-indexing $FILE_COUNT file(s) from merge..."
+
+# Get absolute paths
+REPO_ROOT=$(git rev-parse --show-toplevel)
+ABSOLUTE_FILES=""
+
+while IFS= read -r file; do
+  # Skip if file was deleted
+  if [ -f "$REPO_ROOT/$file" ]; then
+    ABSOLUTE_FILES="$ABSOLUTE_FILES $REPO_ROOT/$file"
+  fi
+done <<< "$FILES_TO_REINDEX"
+
+if [ -z "$ABSOLUTE_FILES" ]; then
+  echo "✅ All merged files were deleted, index cleaned up"
+  exit 0
+fi
+
+# Create a marker file for pending re-index
+MARKER_FILE="$REPO_ROOT/.code-rag-pending-reindex"
+echo "$ABSOLUTE_FILES" > "$MARKER_FILE"
+echo "✅ Re-index request queued (restart MCP server to process)"
+
+exit 0

@@ -1,0 +1,31 @@
+{
+  "assistant": {
+    "version": "2",
+    "default_model": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-20250514"
+    }
+  },
+  "language_models": {
+    "anthropic": {
+      "api_url": "https://api.anthropic.com",
+      "available_models": [
+        {
+          "name": "claude-sonnet-4-20250514",
+          "display_name": "Claude Sonnet 4",
+          "max_tokens": 200000
+        }
+      ]
+    }
+  },
+  "context_servers": {
+    "code-rag": {
+      "command": {
+        "path": "/usr/local/bin/code-rag-mcp",
+        "env": {
+          "LM_STUDIO_URL": "http://localhost:1234/v1"
+        }
+      }
+    }
+  }
+}

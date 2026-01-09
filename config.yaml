@@ -1,0 +1,47 @@
+server_name: "code-rag"
+server_version: "1.0.0"
+
+# Qdrant configuration (Vector Database)
+qdrant_url: "localhost:6334" # gRPC port
+qdrant_api_key: ""
+collection_name: "code_embeddings"
+
+# Embedding configuration
+# Options: "local" (LM Studio), "openai"
+embedding_type: "local"
+
+# For LM Studio / Local embeddings
+embedding_model: "text-embedding-nomic-embed-code"
+embedding_base_url: "http://localhost:1234/v1"
+embedding_dim: 3584 # nomic-embed-code: 3584, nomic-embed-text: 768, bge-small: 384, openai: 1536
+
+# For OpenAI (uncomment to use)
+# embedding_type: "openai"
+# embedding_model: "text-embedding-3-small"
+# embedding_api_key: "sk-..."  # or set OPENAI_API_KEY env var
+# embedding_dim: 1536
+
+# Indexing configuration
+auto_index_on_startup: false # Set to true to index automatically on startup
+code_paths:
+  - "/path/to/your/project" # Example: /home/user/projects/my-code
+file_extensions:
+  - ".go"
+  - ".py"
+  - ".js"
+  - ".ts"
+  - ".tsx"
+  - ".jsx"
+  - ".tf"
+  - ".yaml"
+  - ".yml"
+  - ".md"
+  - ".json"
+  - ".sh"
+max_file_size: 1048576 # 1MB max per file
+chunk_size: 1000 # Characters per chunk
+chunk_overlap: 200 # Overlap between chunks
+
+# Search configuration
+top_k: 5 # Default number of results
+min_score: 0.15 # Default similarity threshold for high-dim embeddings (0-1)

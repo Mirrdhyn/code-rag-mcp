@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "code-rag": {
+      "command": "/usr/local/bin/code-rag-mcp",
+      "args": [],
+      "env": {
+        "LM_STUDIO_URL": "http://localhost:1234/v1",
+        "CONFIG_PATH": "/Users/YOUR_USERNAME/.config/code-rag-mcp/config.yaml"
+      }
+    }
+  },
+  "globalShortcuts": {
+    "semanticSearch": "cmd+shift+f"
+  }
+}

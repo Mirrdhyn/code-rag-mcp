@@ -1,0 +1,57 @@
+#!/bin/bash
+# code-rag-mcp git hook - post-commit
+# Auto-generated - do not edit manually
+
+echo "🔍 code-rag: Detecting changed files..."
+
+# Get files changed in the last commit
+CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD)
+
+# Filter by extensions we care about
+EXTENSIONS="\.js$|\.jsx$|\.ts$|\.tsx$|\.go$|\.py$|\.md$|\.tf$|\.yaml$|\.yml$|\.json$"
+FILES_TO_REINDEX=$(echo "$CHANGED_FILES" | grep -E "$EXTENSIONS")
+
+if [ -z "$FILES_TO_REINDEX" ]; then
+  echo "✅ No code files changed, skipping re-indexing"
+  exit 0
+fi
+
+# Count files
+FILE_COUNT=$(echo "$FILES_TO_REINDEX" | wc -l | tr -d ' ')
+echo "📝 Re-indexing $FILE_COUNT file(s)..."
+
+# Get absolute paths
+REPO_ROOT=$(git rev-parse --show-toplevel)
+ABSOLUTE_FILES=""
+
+while IFS= read -r file; do
+  # Skip if file was deleted
+  if [ -f "$REPO_ROOT/$file" ]; then
+    ABSOLUTE_FILES="$ABSOLUTE_FILES $REPO_ROOT/$file"
+  fi
+done <<< "$FILES_TO_REINDEX"
+
+if [ -z "$ABSOLUTE_FILES" ]; then
+  echo "✅ All changed files were deleted, index cleaned up"
+  exit 0
+fi
+
+# Check if code-rag-mcp is available
+if ! command -v code-rag-mcp &> /dev/null; then
+  echo "⚠️  code-rag-mcp not found in PATH, skipping re-indexing"
+  echo "    Run: export PATH=\"\$PATH:/path/to/code-rag-mcp/directory\""
+  exit 0
+fi
+
+# Create marker file for automatic re-indexing
+# The MCP server will detect and process this file on next startup
+echo "📤 Files to re-index:"
+for file in $ABSOLUTE_FILES; do
+  echo "   - $(basename $file)"
+done
+
+MARKER_FILE="$REPO_ROOT/.code-rag-pending-reindex"
+echo "$ABSOLUTE_FILES" > "$MARKER_FILE"
+echo "✅ Re-index request queued (will be processed on next MCP server start)"
+
+exit 0

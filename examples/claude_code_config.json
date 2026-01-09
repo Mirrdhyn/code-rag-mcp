@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "code-rag": {
+      "command": "/usr/local/bin/code-rag-mcp",
+      "env": {
+        "LM_STUDIO_URL": "http://localhost:1234/v1"
+      }
+    }
+  }
+}
