@@ -1,11 +1,15 @@
 #!/bin/bash
 # code-rag-mcp git hook - post-merge
-# Auto-generated - do not edit manually
+# Automatically re-indexes changed files after each merge/pull
+
+# Configuration
+CODE_RAG_HTTP_PORT="${CODE_RAG_HTTP_PORT:-9333}"
+CODE_RAG_HTTP_HOST="${CODE_RAG_HTTP_HOST:-localhost}"
 
 echo "🔍 code-rag: Detecting merged files..."
 
-# Get files changed between ORIG_HEAD and HEAD (the merge)
-CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r ORIG_HEAD HEAD)
+# Get files changed in the merge
+CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD@{1} HEAD 2>/dev/null || git diff-tree --no-commit-id --name-only -r HEAD~1 HEAD)
 
 # Filter by extensions we care about
 EXTENSIONS="\.js$|\.jsx$|\.ts$|\.tsx$|\.go$|\.py$|\.md$|\.tf$|\.yaml$|\.yml$|\.json$"
@@ -18,27 +22,63 @@ fi
 
 # Count files
 FILE_COUNT=$(echo "$FILES_TO_REINDEX" | wc -l | tr -d ' ')
-echo "📝 Re-indexing $FILE_COUNT file(s) from merge..."
+echo "📝 $FILE_COUNT file(s) to re-index from merge..."
 
 # Get absolute paths
 REPO_ROOT=$(git rev-parse --show-toplevel)
-ABSOLUTE_FILES=""
+ABSOLUTE_FILES=()
 
 while IFS= read -r file; do
   # Skip if file was deleted
   if [ -f "$REPO_ROOT/$file" ]; then
-    ABSOLUTE_FILES="$ABSOLUTE_FILES $REPO_ROOT/$file"
+    ABSOLUTE_FILES+=("$REPO_ROOT/$file")
   fi
 done <<< "$FILES_TO_REINDEX"
 
-if [ -z "$ABSOLUTE_FILES" ]; then
-  echo "✅ All merged files were deleted, index cleaned up"
+if [ ${#ABSOLUTE_FILES[@]} -eq 0 ]; then
+  echo "✅ All merged files were deleted, nothing to index"
   exit 0
 fi
 
-# Create a marker file for pending re-index
+echo "📤 Files to re-index:"
+for file in "${ABSOLUTE_FILES[@]}"; do
+  echo "   - $(basename $file)"
+done
+
+# Try to call HTTP API for immediate re-indexing
+API_URL="http://${CODE_RAG_HTTP_HOST}:${CODE_RAG_HTTP_PORT}/reindex"
+
+# Build JSON payload
+JSON_FILES=$(printf '%s\n' "${ABSOLUTE_FILES[@]}" | jq -R . | jq -s .)
+JSON_PAYLOAD="{\"files\": $JSON_FILES}"
+
+# Check if API is available and call it
+if curl -s --connect-timeout 2 "http://${CODE_RAG_HTTP_HOST}:${CODE_RAG_HTTP_PORT}/health" > /dev/null 2>&1; then
+  echo "🔄 Calling code-rag HTTP API for immediate re-indexing..."
+  
+  RESPONSE=$(curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -d "$JSON_PAYLOAD" \
+    "$API_URL" 2>&1)
+  
+  if echo "$RESPONSE" | jq -e '.success' > /dev/null 2>&1; then
+    FILES_INDEXED=$(echo "$RESPONSE" | jq -r '.files_indexed')
+    echo "✅ Re-indexed $FILES_INDEXED file(s) successfully"
+    exit 0
+  else
+    echo "⚠️  API call failed, falling back to marker file"
+    echo "    Response: $RESPONSE"
+  fi
+else
+  echo "⚠️  code-rag HTTP API not available at $API_URL"
+  echo "    Make sure code-rag-mcp is running with HTTP API enabled"
+fi
+
+# Fallback: Create marker file for deferred re-indexing
 MARKER_FILE="$REPO_ROOT/.code-rag-pending-reindex"
-echo "$ABSOLUTE_FILES" > "$MARKER_FILE"
-echo "✅ Re-index request queued (restart MCP server to process)"
+printf '%s\n' "${ABSOLUTE_FILES[@]}" | tr '\n' ' ' > "$MARKER_FILE"
+echo "📋 Re-index request queued in marker file"
+echo "   Will be processed on next MCP server start or via:"
+echo "   curl -X POST http://${CODE_RAG_HTTP_HOST}:${CODE_RAG_HTTP_PORT}/reindex-pending?workdir=$REPO_ROOT"
 
 exit 0

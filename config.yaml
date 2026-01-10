@@ -1,5 +1,9 @@
 server_name: "code-rag"
-server_version: "1.0.0"
+server_version: "1.1.0"
+
+# HTTP API configuration (for git hook integration)
+http_api_enabled: true
+http_api_port: 9333
 
 # Qdrant configuration (Vector Database)
 qdrant_url: "localhost:6334" # gRPC port

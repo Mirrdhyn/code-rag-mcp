@@ -33,7 +33,7 @@ ls -la .git/hooks/post-*
 
 ## 🔄 How it works
 
-### Automatic workflow
+### Automatic workflow (v1.1.0+)
 
 ```
 ┌─────────────────┐
@@ -54,15 +54,17 @@ ls -la .git/hooks/post-*
 └────────┬────────┘
          │
          ▼
-┌─────────────────┐
-│  4. Create      │     .code-rag-pending-reindex
-│  marker file    │     contains modified files
-└────────┬────────┘
+┌─────────────────────────────────────────────┐
+│  4. HTTP API call                           │
+│  POST http://localhost:9333/reindex         │
+│  (immediate re-indexing)                    │
+└────────┬────────────────────────────────────┘
          │
+         │ If API unavailable (fallback):
          ▼
 ┌─────────────────┐
-│  5. Auto        │     MCP server processes on startup
-│  re-index       │     (automatic since v1.0.0)
+│  5. Create      │     .code-rag-pending-reindex
+│  marker file    │     (processed on next startup)
 └─────────────────┘
 ```
 
@@ -85,6 +87,54 @@ When you delete a file, the hook:
 2. Removes corresponding chunks from the index
 3. Doesn't attempt to re-index the deleted file
 
+## 🌐 HTTP API (v1.1.0+)
+
+The MCP server now includes an HTTP API for immediate re-indexing without waiting for server restart.
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/reindex` | POST | Re-index specific files |
+| `/reindex-pending` | POST | Process marker file |
+
+### Configuration
+
+In `config.yaml`:
+
+```yaml
+# HTTP API configuration
+http_api_enabled: true
+http_api_port: 9333
+```
+
+Or via environment variables:
+```bash
+export CODE_RAG_HTTP_PORT=9333
+export CODE_RAG_HTTP_HOST=localhost
+```
+
+### Usage Examples
+
+**Re-index specific files:**
+```bash
+curl -X POST http://localhost:9333/reindex \
+  -H "Content-Type: application/json" \
+  -d '{"files": ["/path/to/file1.js", "/path/to/file2.py"]}'
+```
+
+**Process pending marker file:**
+```bash
+curl -X POST "http://localhost:9333/reindex-pending?workdir=/path/to/project"
+```
+
+**Health check:**
+```bash
+curl http://localhost:9333/health
+# {"status":"ok","version":"1.1.0"}
+```
+
 ## 🛠️ Usage
 
 ### Standard workflow
@@ -98,16 +148,18 @@ vim config.yaml
 git add .
 git commit -m "Update auth middleware"
 
-# Output from hook:
+# Output from hook (if API available):
 # 🔍 code-rag: Detecting changed files...
-# 📝 Re-indexing 2 file(s)...
+# 📝 2 file(s) to re-index...
 # 📤 Files to re-index:
 #    - auth.js
 #    - config.yaml
-# ✅ Re-index request queued (will be processed on next MCP server start)
+# 🔄 Calling code-rag HTTP API for immediate re-indexing...
+# ✅ Re-indexed 2 file(s) successfully
 
-# 3. Restart MCP server to process re-indexing
-# The server will automatically detect and process pending files
+# Output if API not available:
+# ⚠️  code-rag HTTP API not available at http://localhost:9333/reindex
+# 📋 Re-index request queued in marker file
 ```
 
 ### After a pull/merge
@@ -117,17 +169,24 @@ git pull origin main
 
 # Output from post-merge hook:
 # 🔍 code-rag: Detecting merged files...
-# 📝 Re-indexing 5 file(s) from merge...
-# ✅ Re-index request queued (will be processed on next MCP server start)
+# 📝 5 file(s) to re-index...
+# 🔄 Calling code-rag HTTP API for immediate re-indexing...
+# ✅ Re-indexed 5 file(s) successfully
 ```
 
 ### Manual re-indexing
 
 If you want to force re-indexing of specific files:
 
+**Via HTTP API:**
 ```bash
-# Via the MCP reindex_files tool
-# Arguments:
+curl -X POST http://localhost:9333/reindex \
+  -H "Content-Type: application/json" \
+  -d '{"files": ["/absolute/path/to/file1.js", "/absolute/path/to/file2.py"]}'
+```
+
+**Via MCP tool:**
+```json
 {
   "file_paths": [
     "/absolute/path/to/file1.js",
@@ -138,7 +197,7 @@ If you want to force re-indexing of specific files:
 
 ## 📝 Marker file: `.code-rag-pending-reindex`
 
-The hook creates this file at your project root with the list of files to re-index.
+When the HTTP API is not available, the hook creates this file at your project root with the list of files to re-index.
 
 **Format:**
 ```
@@ -159,6 +218,14 @@ EXTENSIONS="\.js$|\.jsx$|\.ts$|\.tsx$|\.go$|\.py$|\.md$|\.tf$|\.yaml$|\.yml$|\.j
 
 # Example: add Rust (.rs)
 EXTENSIONS="\.js$|\.jsx$|\.ts$|\.tsx$|\.go$|\.py$|\.md$|\.tf$|\.rs$"
+```
+
+### Customize HTTP API port
+
+```bash
+# In your shell profile (~/.bashrc, ~/.zshrc)
+export CODE_RAG_HTTP_PORT=9333
+export CODE_RAG_HTTP_HOST=localhost
 ```
 
 ### Temporarily disable
@@ -191,6 +258,19 @@ mv .git/hooks/post-commit.disabled .git/hooks/post-commit
    cat .git/hooks/post-commit
    ```
 
+### HTTP API not available
+
+1. **Check if MCP server is running** with HTTP API enabled
+2. **Verify port**:
+   ```bash
+   curl http://localhost:9333/health
+   ```
+3. **Check config.yaml**:
+   ```yaml
+   http_api_enabled: true
+   http_api_port: 9333
+   ```
+
 ### No files detected
 
 The hook displays "No code files changed" if:
@@ -208,29 +288,18 @@ The hook displays "No code files changed" if:
 
 ## 📊 Benefits of this approach
 
+✅ **Immediate**: HTTP API provides instant re-indexing (no restart needed)
 ✅ **Automatic**: No need to think about re-indexing
-✅ **Lightweight**: No always-running watcher
 ✅ **Reliable**: Git knows exactly what changed
 ✅ **Performant**: Only indexes modified files
-✅ **Multi-developer**: Each dev re-indexes their own changes
+✅ **Fallback**: Marker file ensures no changes are lost
 
-## ✨ Features (since v1.0.0)
+## ✨ Features
 
-✅ **Automatic processing**: Marker file is processed on MCP server startup
-✅ **No manual intervention**: Just restart the server and pending files are re-indexed
-✅ **Error handling**: Failed re-indexing is logged without blocking startup
-
-## 🔮 Future improvements
-
-- [ ] REST API to call `reindex_files` without MCP
-- [ ] Optional pre-push hook (blocking until indexing complete)
-- [ ] Web dashboard to view ongoing re-indexing
-
-## 💡 Tips
-
-1. **Commit often**: Each commit only re-indexes what changed
-2. **Use branches**: The global index stays consistent even with multiple branches
-3. **Restart server**: The marker file is processed automatically on next startup
+| Version | Feature |
+|---------|---------|
+| v1.0.0 | Marker file processed on startup |
+| v1.1.0 | HTTP API for immediate re-indexing |
 
 ## 🤝 CI/CD Integration
 
@@ -247,8 +316,9 @@ jobs:
       - uses: actions/checkout@v2
       - name: Re-index changed files
         run: |
-          # Call your MCP server or API
-          curl -X POST https://your-mcp-server/reindex
+          curl -X POST http://your-mcp-server:9333/reindex \
+            -H "Content-Type: application/json" \
+            -d '{"files": ${{ steps.changed-files.outputs.all_changed_files }}}'
 ```
 
 ---

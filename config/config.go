@@ -11,6 +11,10 @@ type Config struct {
 	ServerName    string
 	ServerVersion string
 
+	// HTTP API
+	HTTPAPIEnabled bool
+	HTTPAPIPort    int
+
 	// Qdrant
 	QdrantURL      string
 	QdrantAPIKey   string
@@ -54,6 +58,10 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("qdrant_url", "localhost:6334")
 	viper.SetDefault("collection_name", "code_embeddings")
 
+	// HTTP API defaults
+	viper.SetDefault("http_api_enabled", true)
+	viper.SetDefault("http_api_port", 9333)
+
 	// Local embeddings par défaut
 	viper.SetDefault("embedding_type", "local")
 	viper.SetDefault("embedding_model", "nomic-ai/nomic-embed-text-v1.5-GGUF")
@@ -79,6 +87,8 @@ func Load(configPath string) (*Config, error) {
 	cfg := &Config{
 		ServerName:         viper.GetString("server_name"),
 		ServerVersion:      viper.GetString("server_version"),
+		HTTPAPIEnabled:     viper.GetBool("http_api_enabled"),
+		HTTPAPIPort:        viper.GetInt("http_api_port"),
 		QdrantURL:          viper.GetString("qdrant_url"),
 		QdrantAPIKey:       viper.GetString("qdrant_api_key"),
 		CollectionName:     viper.GetString("collection_name"),
@@ -103,6 +113,12 @@ func Load(configPath string) (*Config, error) {
 	}
 	if lmStudioURL := os.Getenv("LM_STUDIO_URL"); lmStudioURL != "" {
 		cfg.EmbeddingBaseURL = lmStudioURL
+	}
+	if httpPort := os.Getenv("CODE_RAG_HTTP_PORT"); httpPort != "" {
+		// Parse port from env if set
+		if port := viper.GetInt("http_api_port"); port > 0 {
+			cfg.HTTPAPIPort = port
+		}
 	}
 
 	return cfg, nil

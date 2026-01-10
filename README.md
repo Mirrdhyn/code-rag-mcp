@@ -8,6 +8,7 @@ MCP (Model Context Protocol) server for semantic code search. Replace grep/ripgr
 - ✅ **Local Embeddings**: Uses LM Studio (no OpenAI required)
 - ✅ **Multi-language**: Go, Python, JS/TS, Terraform, YAML, etc.
 - ✅ **MCP Integration**: Compatible with Claude Code and Zed
+- ✅ **HTTP API**: Git hooks for automatic re-indexing on commit
 - ✅ **Fast**: In-memory indexing with Qdrant
 
 ## 📋 Prerequisites

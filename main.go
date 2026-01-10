@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Mirrdhyn/code-rag-mcp/config"
 	"github.com/Mirrdhyn/code-rag-mcp/rag"
@@ -163,6 +164,21 @@ func main() {
 	// Create MCP server
 	mcpServer := server.NewRAGServer(indexer, incrementalIndexer, vectorDB, embedder, cfg, logger)
 
+	// Start HTTP API server if enabled
+	var httpAPIServer *server.HTTPAPIServer
+	if cfg.HTTPAPIEnabled {
+		httpAPIServer = server.NewHTTPAPIServer(mcpServer, cfg.HTTPAPIPort, logger)
+		if err := httpAPIServer.Start(); err != nil {
+			logger.Error("Failed to start HTTP API server", zap.Error(err))
+		} else {
+			logger.Info("HTTP API server started",
+				zap.Int("port", cfg.HTTPAPIPort),
+				zap.String("reindex_endpoint", "POST /reindex"),
+				zap.String("reindex_pending_endpoint", "POST /reindex-pending"),
+			)
+		}
+	}
+
 	// Start server
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -174,6 +190,16 @@ func main() {
 	go func() {
 		<-sigChan
 		logger.Info("Shutting down gracefully...")
+		
+		// Stop HTTP API server
+		if httpAPIServer != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			if err := httpAPIServer.Stop(shutdownCtx); err != nil {
+				logger.Error("Failed to stop HTTP API server", zap.Error(err))
+			}
+		}
+		
 		cancel()
 	}()
 
